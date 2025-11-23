@@ -1,494 +1,578 @@
-"""
-Flappy Bird Game with custom graphics support (single top and bottom pipes)
-- Random start sounds
-- Random death sounds
-- Dynamic gaps that shrink with score + random variance
-"""
-
-import pygame
-import random
-import sys
 import os
+import random
+import math
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.core.window import Window
+from kivy.clock import Clock
+from kivy.graphics import Rectangle, Color, PushMatrix, PopMatrix, Rotate, Line
+from kivy.core.audio import SoundLoader
+from kivy.core.image import Image as CoreImage
+from kivy.properties import NumericProperty, StringProperty
 
-# Initialize Pygame
-pygame.init()
-pygame.mixer.init()
-
-# Constants - Portrait Mode (480x800)
-SCREEN_WIDTH = 480
-SCREEN_HEIGHT = 800
-FPS = 60
-
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-SKY_BLUE = (135, 206, 235)
-GROUND_COLOR = (222, 216, 149)
-BUTTON_COLOR = (100, 200, 100)
-BUTTON_HOVER = (120, 220, 120)
-RED = (255, 0, 0)
-YELLOW = (255, 255, 0)
-
-# Game variables
-GRAVITY = 0.5
-JUMP_STRENGTH = -9
-PIPE_SPEED = 3
-
-# Base gap parameters (dynamic gap uses these)
-BASE_PIPE_GAP = 170
-MIN_PIPE_GAP = 160
-MAX_PIPE_GAP = 220
-GAP_SHRINK_PER_SCORE = 1.5
-GAP_RANDOM_VARIANCE = 18
-PIPE_FREQUENCY = 1500
-
-# Bird size fallback
-BIRD_WIDTH = 40
-BIRD_HEIGHT = 30
-
-# Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SFX_PATH = os.path.join(BASE_DIR, "assets", "sfx")
-GRAPHICS_PATH = os.path.join(BASE_DIR, "assets", "graphics")
+
+try:
+    Window.size = (400, 600)
+except:
+    pass
 
 
-class Bird(pygame.sprite.Sprite):
+class Bird:
     def __init__(self, x, y):
-        super().__init__()
-        bird_image_path = os.path.join(GRAPHICS_PATH, "bird.png")
-
-        if os.path.isfile(bird_image_path):
-            self.original_image = pygame.image.load(bird_image_path).convert_alpha()
-            self.image = self.original_image
-            self.rect = self.image.get_rect(center=(x, y))
+        self.x = x
+        self.y = y
+        self.velocity = 0
+        self.gravity = -800
+        self.jump_strength = 320
+        self.width = 50
+        self.height = 60
+        self.angle = 0
+        
+        bird_path = os.path.join(BASE_DIR, 'assets', 'graphics', 'bird.png')
+        try:
+            self.texture = CoreImage(bird_path).texture
+        except:
+            self.texture = None
+    
+    def update(self, dt):
+        self.velocity += self.gravity * dt
+        self.y += self.velocity * dt
+        
+        if self.velocity > 0:
+            self.angle = min(25, self.velocity * 0.08)
         else:
-            self.image = pygame.Surface((BIRD_WIDTH, BIRD_HEIGHT), pygame.SRCALPHA)
-            self.draw_bird()
-            self.original_image = self.image
-            self.rect = self.image.get_rect(center=(x, y))
-
+            self.angle = max(-90, self.velocity * 0.08)
+    
+    def jump(self):
+        self.velocity = self.jump_strength
+    
+    def reset(self, x, y):
+        self.x = x
+        self.y = y
         self.velocity = 0
         self.angle = 0
 
-    def draw_bird(self):
-        pygame.draw.circle(self.image, YELLOW, (20, 15), 15)
-        pygame.draw.ellipse(self.image, (255, 140, 0), (10, 12, 15, 8))
-        pygame.draw.circle(self.image, BLACK, (25, 12), 3)
-        pygame.draw.circle(self.image, WHITE, (26, 11), 2)
-        pygame.draw.polygon(self.image, (255, 100, 0), [(30, 15), (40, 15), (35, 18)])
 
-    def update(self):
-        self.velocity += GRAVITY
-        self.rect.y += int(self.velocity)
-        self.angle = max(-30, min(30, -self.velocity * 3))
-
-    def jump(self):
-        self.velocity = JUMP_STRENGTH
-
-    def get_rotated_image(self):
-        return pygame.transform.rotate(self.original_image, self.angle)
-
-
-class Pipe(pygame.sprite.Sprite):
-    def __init__(self, x, height, is_top):
-        super().__init__()
+class Pipe:
+    def __init__(self, x, y, height, is_top=False):
+        self.x = x
+        self.y = y
+        self.width = 70
+        self.height = height
         self.is_top = is_top
-        self.width = 80
-        self.height = max(1, int(height))
-
-        img_name = "pipe_bottom.png"
-        pipe_img_path = os.path.join(GRAPHICS_PATH, img_name)
-
-        if os.path.isfile(pipe_img_path):
-            img = pygame.image.load(pipe_img_path).convert_alpha()
-            img = pygame.transform.scale(img, (self.width, self.height))
-            if is_top:
-                img = pygame.transform.flip(img, False, True)
-            self.image = img
-        else:
-            self.image = pygame.Surface((self.width, self.height))
-            color = (94, 201, 82)
-            border_color = (70, 150, 60)
-            self.image.fill(color)
-            pygame.draw.rect(self.image, border_color, (0, 0, self.width, self.height), 3)
-
+        self.speed = 150
+        
         if is_top:
-            self.rect = self.image.get_rect(topleft=(x, 0))
+            pipe_path = os.path.join(BASE_DIR, 'assets', 'graphics', 'pipe_top.png')
         else:
-            self.rect = self.image.get_rect(topleft=(x, SCREEN_HEIGHT - self.height))
-
-    def update(self):
-        self.rect.x -= PIPE_SPEED
-        if self.rect.right < 0:
-            self.kill()
+            pipe_path = os.path.join(BASE_DIR, 'assets', 'graphics', 'pipe_bottom.png')
+        
+        try:
+            self.texture = CoreImage(pipe_path).texture
+        except:
+            self.texture = None
+    
+    def update(self, dt):
+        self.x -= self.speed * dt
+    
+    def is_offscreen(self):
+        return self.x + self.width < 0
 
 
 class PipePair:
-    def __init__(self, x, current_score):
-        gap = BASE_PIPE_GAP - (current_score * GAP_SHRINK_PER_SCORE)
-        gap += random.randint(-GAP_RANDOM_VARIANCE, GAP_RANDOM_VARIANCE)
-        gap = max(MIN_PIPE_GAP, min(MAX_PIPE_GAP, gap))
-        self.gap = int(gap)
-
-        top_margin = 40
-        bottom_margin = 50
-        max_top_height = SCREEN_HEIGHT - bottom_margin - self.gap - top_margin
-
-        top_height = (
-            top_margin
-            if max_top_height < top_margin
-            else random.randint(top_margin, max_top_height)
-        )
-
-        top_height = max(1, int(top_height))
-        bottom_height = SCREEN_HEIGHT - top_height - self.gap
-
-        self.top_pipe = Pipe(x, top_height, True)
-        self.bottom_pipe = Pipe(x, bottom_height, False)
-
+    def __init__(self, x, gap, window_height):
+        base_gap = 170
+        min_gap = 160
+        max_gap = 220
+        
+        self.gap = max(min_gap, min(max_gap, gap))
+        self.x = x
         self.scored = False
-
-    def update(self):
-        self.top_pipe.update()
-        self.bottom_pipe.update()
-
-    def draw(self, screen):
-        screen.blit(self.top_pipe.image, self.top_pipe.rect)
-        screen.blit(self.bottom_pipe.image, self.bottom_pipe.rect)
-
-    def collides_with(self, bird):
-        return (
-            self.top_pipe.rect.colliderect(bird.rect)
-            or self.bottom_pipe.rect.colliderect(bird.rect)
-        )
-
+        
+        variance = random.uniform(-18, 18)
+        bottom_height = random.uniform(100, window_height - self.gap - 150) + variance
+        bottom_height = max(80, min(window_height - self.gap - 80, bottom_height))
+        
+        self.bottom_pipe = Pipe(x, 0, bottom_height, is_top=False)
+        top_y = bottom_height + self.gap
+        top_height = window_height - top_y
+        self.top_pipe = Pipe(x, top_y, top_height, is_top=True)
+    
+    def update(self, dt):
+        self.bottom_pipe.update(dt)
+        self.top_pipe.update(dt)
+        self.x = self.bottom_pipe.x
+    
     def is_offscreen(self):
-        return self.top_pipe.rect.right < 0
-
-
-class Button:
-    def __init__(self, x, y, width, height, text, font_size=36):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.text = text
-        self.font = pygame.font.Font(None, font_size)
-        self.is_hovered = False
-
-    def draw(self, screen):
-        color = BUTTON_HOVER if self.is_hovered else BUTTON_COLOR
-        pygame.draw.rect(screen, color, self.rect, border_radius=10)
-        pygame.draw.rect(screen, BLACK, self.rect, 3, border_radius=10)
-
-        text_surface = self.font.render(self.text, True, BLACK)
-        text_rect = text_surface.get_rect(center=self.rect.center)
-        screen.blit(text_surface, text_rect)
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            self.is_hovered = self.rect.collidepoint(event.pos)
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
+        return self.bottom_pipe.is_offscreen()
+    
+    def check_collision(self, bird):
+        bird_left = bird.x - bird.width / 2
+        bird_right = bird.x + bird.width / 2
+        bird_top = bird.y + bird.height / 2
+        bird_bottom = bird.y - bird.height / 2
+        
+        pipe_left = self.bottom_pipe.x
+        pipe_right = self.bottom_pipe.x + self.bottom_pipe.width
+        
+        if bird_right > pipe_left and bird_left < pipe_right:
+            if bird_bottom < self.bottom_pipe.height or bird_top > self.top_pipe.y:
                 return True
         return False
 
 
-class Game:
-    def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Flappy Veejayy")
-        self.clock = pygame.time.Clock()
+class StyledButton(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = (0, 0, 0, 0)
+        self.background_normal = ''
+        self.background_down = ''
+        
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            return super().on_touch_down(touch)
+        return False
 
-        self.flap_sound = None
-        self.point_sound = None
-        self.death_sounds = []
-        self.start_sounds = []
 
-        self.load_sounds()
-
-        # Play a random start sound at game launch
-        self.play_random_start_sound()
-
-        self.state = "menu"
-        self.score = 0
-        self.high_score = 0
-
-        self.font_large = pygame.font.Font(None, 72)
-        self.font_medium = pygame.font.Font(None, 48)
-        self.font_small = pygame.font.Font(None, 36)
-
-        self.start_button = Button(SCREEN_WIDTH // 2 - 100, 400, 200, 60, "START")
-        self.restart_button = Button(SCREEN_WIDTH // 2 - 100, 500, 200, 60, "RESTART")
-
+class GameWidget(Widget):
+    score = NumericProperty(0)
+    high_score = NumericProperty(0)
+    state = StringProperty('menu')
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.bird = None
         self.pipes = []
-        self.last_pipe_time = 0
-
-    def load_sounds(self):
-        # Basic sounds
+        self.sounds = {}
+        self.game_loop = None
+        self.pipe_spawn_event = None
+        self.blink_time = 0
+        self.dead_bird_pos = None
+        
+        self.title_label = Label(
+            text='FLAPPY Veejayy',
+            font_size=52,
+            bold=True,
+            size_hint=(None, None),
+            size=(400, 80),
+            color=(1, 1, 1, 1),
+            outline_width=2,
+            outline_color=(0, 0, 0, 0)
+        )
+        self.add_widget(self.title_label)
+        
+        self.instruction_label = Label(
+            text='Press SPACE or Click to Flap',
+            font_size=20,
+            size_hint=(None, None),
+            size=(400, 40),
+            color=(0, 0, 0, 1)
+        )
+        self.add_widget(self.instruction_label)
+        
+        self.start_button = StyledButton(
+            text='START',
+            size_hint=(None, None),
+            size=(200, 55),
+            font_size=32,
+            bold=True,
+            color=(0, 0, 0, 1)
+        )
+        self.start_button.bind(on_press=self.start_game)
+        self.add_widget(self.start_button)
+        
+        self.developer_label = Label(
+            text='by ~Rowdy',
+            font_size=14,
+            size_hint=(None, None),
+            size=(180, 10),
+            color=(1, 1, 1, 1)
+        )
+        self.add_widget(self.developer_label)
+        
+        self.game_over_label = Label(
+            text='GAME OVER',
+            font_size=60,
+            bold=True,
+            size_hint=(None, None),
+            size=(400, 80),
+            color=(0.9, 0.1, 0.1, 1)
+        )
+        
+        self.score_display_label = Label(
+            text='Score: 0',
+            font_size=34,
+            bold=True,
+            size_hint=(None, None),
+            size=(400, 50),
+            color=(1, 1, 1, 1)
+        )
+        
+        self.high_score_display_label = Label(
+            text='High Score: 0',
+            font_size=34,
+            bold=True,
+            size_hint=(None, None),
+            size=(400, 50),
+            color=(1, 1, 1, 1)
+        )
+        
+        self.restart_button = StyledButton(
+            text='RESTART',
+            size_hint=(None, None),
+            size=(200, 55),
+            font_size=32,
+            bold=True,
+            color=(0, 0, 0, 1)
+        )
+        self.restart_button.bind(on_press=self.restart_game)
+        
+        self.score_label = Label(
+            text='0',
+            font_size=72,
+            bold=True,
+            size_hint=(None, None),
+            size=(200, 80),
+            color=(1, 1, 1, 1)
+        )
+        
+        self.bind(size=self.update_layout, pos=self.update_layout)
+        Clock.schedule_once(self.load_sounds, 0.1)
+        Clock.schedule_once(self.play_start_sound, 0.2)
+        Clock.schedule_interval(self.update_blink, 0.5)
+        Clock.schedule_interval(self.draw_ui, 1/60)
+    
+    def draw_wavy_border(self):
+        points = []
+        wave_amplitude = 8
+        segments = 50
+        
+        for i in range(segments + 1):
+            t = i / segments
+            x = t * self.width
+            y = self.height - 15 + wave_amplitude * math.sin(t * math.pi * 4)
+            points.extend([x, y])
+        
+        for i in range(segments + 1):
+            t = i / segments
+            x = self.width - (t * self.width)
+            y = 15 - wave_amplitude * math.sin(t * math.pi * 4)
+            points.extend([x, y])
+        
+        return points
+    
+    def draw_button(self, button):
+        with button.canvas.before:
+            button.canvas.before.clear()
+            Color(0.5, 0.85, 0.4, 1)
+            Rectangle(pos=button.pos, size=button.size)
+            Color(0, 0, 0, 1)
+            Line(rectangle=(button.pos[0], button.pos[1], button.size[0], button.size[1]), width=3)
+    
+    def draw_menu_background(self):
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0.53, 0.81, 0.92, 1)
+            Rectangle(pos=(0, 0), size=(self.width, self.height))
+            
+            Color(0.85, 0.65, 0.13, 1)
+            Rectangle(pos=(0, 0), size=(self.width, 80))
+            
+            wavy_points = self.draw_wavy_border()
+            if len(wavy_points) > 4:
+                Color(0.35, 0.55, 0.62, 1)
+                Line(points=wavy_points, width=2, close=True)
+    
+    def draw_ui(self, dt):
+        if self.state == 'menu':
+            self.draw_menu_background()
+        
+        self.draw_button(self.start_button)
+        self.draw_button(self.restart_button)
+    
+    def update_blink(self, dt):
+        self.blink_time += dt
+        if self.state == 'menu':
+            alpha = 0.3 + 0.7 * (0.5 + 0.5 * math.sin(self.blink_time * 4))
+            self.instruction_label.color = (0, 0, 0, alpha)
+    
+    def update_layout(self, *args):
+        self.title_label.pos = (self.width / 2 - 200, self.height * 0.62)
+        self.instruction_label.pos = (self.width / 2 - 200, self.height * 0.48)
+        self.start_button.pos = (self.width / 2 - 100, self.height * 0.32)
+        self.developer_label.pos = (self.width - 160, self.height - 35)
+        
+        self.game_over_label.pos = (self.width / 2 - 200, self.height * 0.72)
+        self.score_display_label.pos = (self.width / 2 - 200, self.height * 0.50)
+        self.high_score_display_label.pos = (self.width / 2 - 200, self.height * 0.40)
+        self.restart_button.pos = (self.width / 2 - 100, self.height * 0.20)
+        
+        self.score_label.pos = (self.width / 2 - 100, self.height - 100)
+    
+    def load_sounds(self, dt):
+        sound_files = {
+            'flap': os.path.join(BASE_DIR, 'assets', 'sfx', 'flap.wav'),
+            'point': os.path.join(BASE_DIR, 'assets', 'sfx', 'point.wav'),
+            'background_music': os.path.join(BASE_DIR, 'assets', 'sfx', 'background_music.wav')
+        }
+        
+        for name, path in sound_files.items():
+            try:
+                sound = SoundLoader.load(path)
+                if sound:
+                    if name == 'flap' or name == 'point':
+                        sound.volume = 0.3
+                    elif name == 'background_music':
+                        sound.volume = 0.5
+                        sound.loop = True
+                    self.sounds[name] = sound
+            except:
+                pass
+        
+        death_dir = os.path.join(BASE_DIR, 'assets', 'sfx', 'deaths')
+        start_dir = os.path.join(BASE_DIR, 'assets', 'sfx', 'starts')
+        
+        self.sounds['deaths'] = []
+        self.sounds['starts'] = []
+        
         try:
-            self.flap_sound = pygame.mixer.Sound(os.path.join(SFX_PATH, "flap.wav"))
-            self.flap_sound.set_volume(0.5)   
-        except:
-            self.flap_sound = None
-
-        try:
-            self.point_sound = pygame.mixer.Sound(os.path.join(SFX_PATH, "point.wav"))
-            self.point_sound.set_volume(0.3)
-        except:
-            self.point_sound = None
-
-
-        # Background music
-        try:
-            pygame.mixer.music.load(os.path.join(SFX_PATH, "background_music.wav"))
-            pygame.mixer.music.set_volume(0.4)
+            for file in os.listdir(death_dir):
+                if file.endswith('.wav'):
+                    try:
+                        sound = SoundLoader.load(os.path.join(death_dir, file))
+                        if sound:
+                            sound.volume = 0.9
+                            self.sounds['deaths'].append(sound)
+                    except:
+                        pass
         except:
             pass
-
-        # === RANDOM DEATH SOUNDS ===
-        death_folder = os.path.join(SFX_PATH, "deaths")
-        if os.path.isdir(death_folder):
-            for file in os.listdir(death_folder):
-                if file.lower().endswith((".wav", ".ogg", ".mp3")):
+        
+        try:
+            for file in os.listdir(start_dir):
+                if file.endswith('.wav'):
                     try:
-                        snd = pygame.mixer.Sound(os.path.join(death_folder, file))
-                        snd.set_volume(0.9)
-                        self.death_sounds.append(snd)
+                        sound = SoundLoader.load(os.path.join(start_dir, file))
+                        if sound:
+                            sound.volume = 1
+                            self.sounds['starts'].append(sound)
                     except:
                         pass
-
-        # === RANDOM START SOUNDS ===
-        start_folder = os.path.join(SFX_PATH, "starts")
-        if os.path.isdir(start_folder):
-            for file in os.listdir(start_folder):
-                if file.lower().endswith((".wav", ".ogg", ".mp3")):
-                    try:
-                        snd = pygame.mixer.Sound(os.path.join(start_folder, file))
-                        snd.set_volume(0.9)
-                        self.start_sounds.append(snd)
-                    except:
-                        pass
-
-        print(f"Loaded {len(self.death_sounds)} death sounds.")
-        print(f"Loaded {len(self.start_sounds)} start sounds.")
-
-    # PLAY RANDOM START SOUND
-    def play_random_start_sound(self):
-        if self.start_sounds:
-            try:
-                random.choice(self.start_sounds).play()
-            except:
-                pass
-
-    # PLAY RANDOM DEATH SOUND
-    def play_random_death_sound(self):
-        if self.death_sounds:
-            try:
-                random.choice(self.death_sounds).play()
-            except:
-                pass
-
-    def play_sound(self, sound):
-        if sound:
-            try:
-                sound.play()
-            except:
-                pass
-
-    def reset_game(self):
-        self.bird = Bird(SCREEN_WIDTH // 4, SCREEN_HEIGHT // 2)
-        self.pipes = []
+        except:
+            pass
+    
+    def play_start_sound(self, dt):
+        if self.sounds.get('starts'):
+            random.choice(self.sounds['starts']).play()
+    
+    def play_sound(self, name):
+        if name in self.sounds and self.sounds[name]:
+            self.sounds[name].play()
+    
+    def start_game(self, *args):
+        self.state = 'playing'
         self.score = 0
-        self.last_pipe_time = pygame.time.get_ticks() - 500
-
-    def start_music(self):
-        try:
-            pygame.mixer.music.play(-1)
-        except:
-            pass
-
-    def stop_music(self):
-        try:
-            pygame.mixer.music.stop()
-        except:
-            pass
-
-    def draw_menu(self):
-        self.screen.fill(SKY_BLUE)
-        title = self.font_large.render("FLAPPY Veejayy", True, BLACK)
-        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 200))
-
-        shadow = self.font_large.render("FLAPPY Veejayy", True, (50, 50, 50))
-        shadow_rect = shadow.get_rect(center=(SCREEN_WIDTH // 2 + 3, 203))
-
-        self.screen.blit(shadow, shadow_rect)
-        self.screen.blit(title, title_rect)
-
-        inst1 = self.font_small.render("Press SPACE or Click to Flap", True, BLACK)
-        inst1_rect = inst1.get_rect(center=(SCREEN_WIDTH // 2, 300))
-        self.screen.blit(inst1, inst1_rect)
-
-        if self.high_score > 0:
-            hs_text = self.font_medium.render(f"High Score: {self.high_score}", True, BLACK)
-            hs_rect = hs_text.get_rect(center=(SCREEN_WIDTH // 2, 350))
-            self.screen.blit(hs_text, hs_rect)
-
-        self.start_button.draw(self.screen)
-
-    def draw_game(self):
-        self.screen.fill(SKY_BLUE)
-
-        # Ground
-        ground_rect = pygame.Rect(0, SCREEN_HEIGHT - 50, SCREEN_WIDTH, 50)
-        pygame.draw.rect(self.screen, GROUND_COLOR, ground_rect)
-
-        # Pipes
-        for pipe_pair in self.pipes:
-            pipe_pair.draw(self.screen)
-
-        # Bird
-        rotated_bird = self.bird.get_rotated_image()
-        bird_rect = rotated_bird.get_rect(center=self.bird.rect.center)
-        self.screen.blit(rotated_bird, bird_rect)
-
-        score_text = self.font_large.render(str(self.score), True, WHITE)
-        score_rect = score_text.get_rect(center=(SCREEN_WIDTH // 2, 80))
-
-        # Outline
-        for ox, oy in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
-            outline = self.font_large.render(str(self.score), True, BLACK)
-            outline_rect = score_rect.copy()
-            outline_rect.x += ox
-            outline_rect.y += oy
-            self.screen.blit(outline, outline_rect)
-
-        self.screen.blit(score_text, score_rect)
-
-    def draw_game_over(self):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        overlay.set_alpha(128)
-        overlay.fill(BLACK)
-        self.screen.blit(overlay, (0, 0))
-
-        game_over_text = self.font_large.render("GAME OVER", True, RED)
-        game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, 200))
-        self.screen.blit(game_over_text, game_over_rect)
-
-        score_text = self.font_medium.render(f"Score: {self.score}", True, WHITE)
-        score_rect = score_text.get_rect(center=(SCREEN_WIDTH // 2, 300))
-        self.screen.blit(score_text, score_rect)
-
-        hs_text = self.font_small.render(f"High Score: {self.high_score}", True, WHITE)
-        hs_rect = hs_text.get_rect(center=(SCREEN_WIDTH // 2, 360))
-        self.screen.blit(hs_text, hs_rect)
-
-        self.restart_button.draw(self.screen)
-
-    # -- EVENTS --
-    def handle_menu_events(self, event):
-        if self.start_button.handle_event(event):
-            self.state = "playing"
-            self.reset_game()
-            self.start_music()
-
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            self.state = "playing"
-            self.reset_game()
-            self.start_music()
-
-    def handle_playing_events(self, event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            self.bird.jump()
-            self.play_sound(self.flap_sound)
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            self.bird.jump()
-            self.play_sound(self.flap_sound)
-
-    def handle_game_over_events(self, event):
-        if self.restart_button.handle_event(event):
-            self.state = "playing"
-            self.reset_game()
-            self.start_music()
-
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            self.state = "playing"
-            self.reset_game()
-            self.start_music()
-
-    # -- MAIN GAME LOGIC --
-    def update_playing(self):
-        self.bird.update()
-
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_pipe_time > PIPE_FREQUENCY:
-            self.pipes.append(PipePair(SCREEN_WIDTH, self.score))
-            self.last_pipe_time = current_time
-
+        self.pipes = []
+        self.dead_bird_pos = None
+        
+        self.bird = Bird(self.width * 0.3, self.height / 2)
+        
+        self.remove_widget(self.start_button)
+        self.remove_widget(self.instruction_label)
+        self.remove_widget(self.title_label)
+        self.remove_widget(self.developer_label)
+        
+        self.add_widget(self.score_label)
+        
+        self.game_loop = Clock.schedule_interval(self.update_game, 1 / 60)
+        self.pipe_spawn_event = Clock.schedule_interval(self.spawn_pipe, 1.5)
+        
+        if 'background_music' in self.sounds:
+            self.sounds['background_music'].play()
+    
+    def restart_game(self, *args):
+        self.remove_widget(self.restart_button)
+        self.remove_widget(self.game_over_label)
+        self.remove_widget(self.score_display_label)
+        self.remove_widget(self.high_score_display_label)
+        self.start_game()
+    
+    def spawn_pipe(self, dt):
+        gap = 170 - (self.score * 1.5)
+        gap = max(160, min(220, gap))
+        pipe_pair = PipePair(self.width, gap, self.height)
+        self.pipes.append(pipe_pair)
+    
+    def update_game(self, dt):
+        if self.state != 'playing':
+            return
+        
+        self.bird.update(dt)
+        
+        if self.bird.y < 0 or self.bird.y > self.height:
+            self.game_over()
+            return
+        
         for pipe_pair in self.pipes[:]:
-            pipe_pair.update()
-
-            if not pipe_pair.scored and pipe_pair.top_pipe.rect.right < self.bird.rect.left:
-                pipe_pair.scored = True
-                self.score += 1
-                self.play_sound(self.point_sound)
-
-            if pipe_pair.collides_with(self.bird):
+            pipe_pair.update(dt)
+            
+            if pipe_pair.check_collision(self.bird):
                 self.game_over()
                 return
-
+            
+            if not pipe_pair.scored and pipe_pair.x + pipe_pair.bottom_pipe.width < self.bird.x:
+                pipe_pair.scored = True
+                self.score += 1
+                self.play_sound('point')
+            
             if pipe_pair.is_offscreen():
                 self.pipes.remove(pipe_pair)
-
-        if self.bird.rect.bottom >= SCREEN_HEIGHT - 50:
-            self.game_over()
-
-        if self.bird.rect.top <= 0:
-            self.bird.rect.top = 0
-            self.bird.velocity = 0
-
+        
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0.53, 0.81, 0.92, 1)
+            Rectangle(pos=(0, 0), size=(self.width, self.height))
+            
+            Color(0.85, 0.65, 0.13, 1)
+            Rectangle(pos=(0, 0), size=(self.width, 80))
+            
+            for pipe_pair in self.pipes:
+                if pipe_pair.bottom_pipe.texture:
+                    Color(1, 1, 1, 1)
+                    Rectangle(
+                        pos=(pipe_pair.bottom_pipe.x, pipe_pair.bottom_pipe.y),
+                        size=(pipe_pair.bottom_pipe.width, pipe_pair.bottom_pipe.height),
+                        texture=pipe_pair.bottom_pipe.texture
+                    )
+                else:
+                    Color(0.4, 0.4, 0.4, 1)
+                    Rectangle(
+                        pos=(pipe_pair.bottom_pipe.x, pipe_pair.bottom_pipe.y),
+                        size=(pipe_pair.bottom_pipe.width, pipe_pair.bottom_pipe.height)
+                    )
+                
+                if pipe_pair.top_pipe.texture:
+                    Color(1, 1, 1, 1)
+                    Rectangle(
+                        pos=(pipe_pair.top_pipe.x, pipe_pair.top_pipe.y),
+                        size=(pipe_pair.top_pipe.width, pipe_pair.top_pipe.height),
+                        texture=pipe_pair.top_pipe.texture
+                    )
+                else:
+                    Color(0.4, 0.4, 0.4, 1)
+                    Rectangle(
+                        pos=(pipe_pair.top_pipe.x, pipe_pair.top_pipe.y),
+                        size=(pipe_pair.top_pipe.width, pipe_pair.top_pipe.height)
+                    )
+            
+            PushMatrix()
+            Rotate(angle=self.bird.angle, origin=(self.bird.x, self.bird.y))
+            Color(1, 1, 1, 1)
+            if self.bird.texture:
+                Rectangle(
+                    pos=(self.bird.x - self.bird.width / 2, self.bird.y - self.bird.height / 2),
+                    size=(self.bird.width, self.bird.height),
+                    texture=self.bird.texture
+                )
+            else:
+                Color(1, 0.8, 0, 1)
+                Rectangle(
+                    pos=(self.bird.x - self.bird.width / 2, self.bird.y - self.bird.height / 2),
+                    size=(self.bird.width, self.bird.height)
+                )
+            PopMatrix()
+        
+        self.score_label.text = str(self.score)
+    
     def game_over(self):
-        self.state = "game_over"
-        self.play_random_death_sound()
-        self.stop_music()
-
+        self.state = 'game_over'
+        
+        self.dead_bird_pos = (self.bird.x, self.bird.y, self.bird.angle)
+        
         if self.score > self.high_score:
             self.high_score = self.score
+        
+        if self.game_loop:
+            self.game_loop.cancel()
+        if self.pipe_spawn_event:
+            self.pipe_spawn_event.cancel()
+        
+        if 'background_music' in self.sounds:
+            self.sounds['background_music'].stop()
+        
+        if self.sounds.get('deaths'):
+            random.choice(self.sounds['deaths']).play()
+        
+        self.remove_widget(self.score_label)
+        
+        self.score_display_label.text = f'Score: {self.score}'
+        self.high_score_display_label.text = f'High Score: {self.high_score}'
+        
+        self.add_widget(self.game_over_label)
+        self.add_widget(self.score_display_label)
+        self.add_widget(self.high_score_display_label)
+        self.add_widget(self.restart_button)
+        self.add_widget(self.developer_label)
+        
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0.53, 0.81, 0.92, 1)
+            Rectangle(pos=(0, 0), size=(self.width, self.height))
+            
+            Color(0.85, 0.65, 0.13, 1)
+            Rectangle(pos=(0, 0), size=(self.width, 80))
+            
+            wavy_points = self.draw_wavy_border()
+            if len(wavy_points) > 4:
+                Color(0.35, 0.55, 0.62, 1)
+                Line(points=wavy_points, width=2, close=True)
+            
+            if self.dead_bird_pos:
+                PushMatrix()
+                Rotate(angle=self.dead_bird_pos[2], origin=(self.dead_bird_pos[0], self.dead_bird_pos[1]))
+                Color(1, 1, 1, 1)
+                if self.bird and self.bird.texture:
+                    Rectangle(
+                        pos=(self.dead_bird_pos[0] - self.bird.width / 2, 
+                             self.dead_bird_pos[1] - self.bird.height / 2),
+                        size=(self.bird.width, self.bird.height),
+                        texture=self.bird.texture
+                    )
+                else:
+                    Color(1, 0.8, 0, 1)
+                    Rectangle(
+                        pos=(self.dead_bird_pos[0] - 25, self.dead_bird_pos[1] - 19),
+                        size=(50, 38)
+                    )
+                PopMatrix()
+    
+    def on_touch_down(self, touch):
+        if super().on_touch_down(touch):
+            return True
+        
+        if self.state == 'playing':
+            self.bird.jump()
+            self.play_sound('flap')
+            return True
+        
+        return False
+    
+    def on_key_down(self, window, key, *args):
+        if self.state == 'playing' and key == 32:
+            self.bird.jump()
+            self.play_sound('flap')
 
-    def run(self):
-        running = True
 
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    running = False
-
-                if self.state == "menu":
-                    self.handle_menu_events(event)
-                elif self.state == "playing":
-                    self.handle_playing_events(event)
-                elif self.state == "game_over":
-                    self.handle_game_over_events(event)
-
-            if self.state == "playing":
-                self.update_playing()
-
-            if self.state == "menu":
-                self.draw_menu()
-            elif self.state == "playing":
-                self.draw_game()
-            elif self.state == "game_over":
-                self.draw_game()
-                self.draw_game_over()
-
-            pygame.display.flip()
-            self.clock.tick(FPS)
-
-        pygame.quit()
-        sys.exit()
+class FlappyApp(App):
+    def build(self):
+        self.title = 'Flappy Veejayy'
+        game = GameWidget()
+        Window.bind(on_key_down=game.on_key_down)
+        return game
 
 
-if __name__ == "__main__":
-    game = Game()
-    game.run()
+if __name__ == '__main__':
+    FlappyApp().run()
