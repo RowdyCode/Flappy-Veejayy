@@ -303,69 +303,93 @@ class GameWidget(Widget):
             self.instruction_label.color = (0, 0, 0, alpha)
     
     def update_layout(self, *args):
-        self.title_label.pos = (self.width / 2 - 200, self.height * 0.62)
-        self.instruction_label.pos = (self.width / 2 - 200, self.height * 0.48)
-        self.start_button.pos = (self.width / 2 - 100, self.height * 0.32)
-        self.developer_label.pos = (self.width - 160, self.height - 35)
-        
-        self.game_over_label.pos = (self.width / 2 - 200, self.height * 0.72)
-        self.score_display_label.pos = (self.width / 2 - 200, self.height * 0.50)
-        self.high_score_display_label.pos = (self.width / 2 - 200, self.height * 0.40)
-        self.restart_button.pos = (self.width / 2 - 100, self.height * 0.20)
-        
-        self.score_label.pos = (self.width / 2 - 100, self.height - 100)
+
+      # Dynamic Font Sizes
+      self.title_label.font_size = self.height * 0.07
+      self.instruction_label.font_size = self.height * 0.033
+      self.start_button.font_size = self.height * 0.045
+      self.developer_label.font_size = self.height * 0.027
+      self.game_over_label.font_size = self.height * 0.07
+      self.score_display_label.font_size = self.height * 0.032
+      self.high_score_display_label.font_size = self.height * 0.032
+      self.restart_button.font_size = self.height * 0.045
+      self.score_label.font_size = self.height * 0.08
+
+    # Dynamic Sizes and Positions
+      self.title_label.size = (self.width * 0.8, self.height * 0.13)
+      self.title_label.pos = (self.width * 0.1, self.height * 0.75)
+      self.instruction_label.size = (self.width * 0.8, self.height * 0.05)
+      self.instruction_label.pos = (self.width * 0.1, self.height * 0.63)
+      self.start_button.size = (self.width * 0.42, self.height * 0.08)
+      self.start_button.pos = (self.width * 0.29, self.height * 0.44)
+      self.developer_label.size = (self.width * 0.27, self.height * 0.025)
+      self.developer_label.pos = (self.width * 0.70, self.height * 0.97)
+
+      self.game_over_label.size = (self.width * 0.8, self.height * 0.13)
+      self.game_over_label.pos = (self.width * 0.12, self.height * 0.72)
+      self.score_display_label.size = (self.width * 0.9, self.height * 0.06)
+      self.score_display_label.pos = (self.width * 0.05, self.height * 0.48)
+      self.high_score_display_label.size = (self.width * 0.9, self.height * 0.06)
+      self.high_score_display_label.pos = (self.width * 0.05, self.height * 0.41)
+      self.restart_button.size = (self.width * 0.42, self.height * 0.08)
+      self.restart_button.pos = (self.width * 0.28, self.height * 0.23)
+      self.score_label.size = (self.width * 0.2, self.height * 0.09)
+      self.score_label.pos = (self.width * 0.40, self.height * 0.88)
     
     def load_sounds(self, dt):
+        use_ogg = True  # Set this to False to use wav; True for ogg
+
+        def find_audio(folder, name):
+            ext = '.ogg' if use_ogg else '.wav'
+            path = os.path.join(BASE_DIR, folder, name + ext)
+            if os.path.exists(path):
+                return path
+            return None
+
         sound_files = {
-            'flap': os.path.join(BASE_DIR, 'assets', 'sfx', 'flap.wav'),
-            'point': os.path.join(BASE_DIR, 'assets', 'sfx', 'point.wav'),
-            'background_music': os.path.join(BASE_DIR, 'assets', 'sfx', 'background_music.wav')
+            'flap': find_audio('assets/sfx', 'flap'),
+            'point': find_audio('assets/sfx', 'point'),
+            'background_music': find_audio('assets/sfx', 'background_music')
         }
-        
+
         for name, path in sound_files.items():
-            try:
-                sound = SoundLoader.load(path)
-                if sound:
-                    if name == 'flap' or name == 'point':
-                        sound.volume = 0.3
-                    elif name == 'background_music':
-                        sound.volume = 0.5
-                        sound.loop = True
-                    self.sounds[name] = sound
-            except:
-                pass
-        
+            if path:
+                try:
+                    sound = SoundLoader.load(path)
+                    if sound:
+                        if name == 'flap' or name == 'point':
+                            sound.volume = 0.3
+                        elif name == 'background_music':
+                            sound.volume = 0.5
+                            sound.loop = True
+                        self.sounds[name] = sound
+                except:
+                    pass
+
         death_dir = os.path.join(BASE_DIR, 'assets', 'sfx', 'deaths')
         start_dir = os.path.join(BASE_DIR, 'assets', 'sfx', 'starts')
-        
+
         self.sounds['deaths'] = []
         self.sounds['starts'] = []
-        
-        try:
-            for file in os.listdir(death_dir):
-                if file.endswith('.wav'):
-                    try:
-                        sound = SoundLoader.load(os.path.join(death_dir, file))
-                        if sound:
-                            sound.volume = 0.9
-                            self.sounds['deaths'].append(sound)
-                    except:
-                        pass
-        except:
-            pass
-        
-        try:
-            for file in os.listdir(start_dir):
-                if file.endswith('.wav'):
-                    try:
-                        sound = SoundLoader.load(os.path.join(start_dir, file))
-                        if sound:
-                            sound.volume = 1
-                            self.sounds['starts'].append(sound)
-                    except:
-                        pass
-        except:
-            pass
+
+        ext = '.ogg' if use_ogg else '.wav'
+        for dir_path, sound_list, vol in [
+            (death_dir, self.sounds['deaths'], 0.9),
+            (start_dir, self.sounds['starts'], 1),
+        ]:
+            try:
+                for file in os.listdir(dir_path):
+                    if file.endswith(ext):
+                        try:
+                            sound = SoundLoader.load(os.path.join(dir_path, file))
+                            if sound:
+                                sound.volume = vol
+                                sound_list.append(sound)
+                        except:
+                            pass
+            except:
+                pass
+
     
     def play_start_sound(self, dt):
         if self.sounds.get('starts'):
