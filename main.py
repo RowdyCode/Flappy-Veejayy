@@ -11,11 +11,13 @@ from kivy.graphics import Rectangle, Color, PushMatrix, PopMatrix, Rotate, Line
 from kivy.core.audio import SoundLoader
 from kivy.core.image import Image as CoreImage
 from kivy.properties import NumericProperty, StringProperty
+from kivy.utils import platform
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 try:
-    Window.size = (400, 600)
+    if platform not in ('android', 'ios'): 
+        Window.size = (400, 600)
 except:
     pass
 
@@ -144,6 +146,7 @@ class GameWidget(Widget):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.bind(size=self.update_layout, pos=self.update_layout)
         self.bird = None
         self.pipes = []
         self.sounds = {}
