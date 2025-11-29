@@ -66,7 +66,7 @@ class Pipe:
         self.width = gamewidget.width * 0.13 if gamewidget else 70
         self.height = height
         self.is_top = is_top
-        self.speed = 150
+        self.speed = 170
 
         if is_top:
             pipe_path = os.path.join(BASE_DIR, 'assets', 'graphics', 'pipe_top.png')
@@ -87,8 +87,8 @@ class Pipe:
 class PipePair:
     def __init__(self, x, gap, window_height, gamewidget):
         pipe_width = gamewidget.width * 0.10
-        min_gap = gamewidget.height * 0.15
-        max_gap = gamewidget.height * 0.32
+        min_gap = gamewidget.height * 0.2
+        max_gap = gamewidget.height * 0.25
         gap = max(min_gap, min(max_gap, gap))
         self.gap = gap
         self.x = x
@@ -175,7 +175,7 @@ class GameWidget(Widget):
         self.start_button = StyledButton(
             text='START',
             size_hint=(None, None),
-            font_size=32,
+            font_size=35,
             bold=True,
             color=(0, 0, 0, 1)
         )
@@ -191,11 +191,13 @@ class GameWidget(Widget):
         self.add_widget(self.developer_label)
 
         self.game_over_label = Label(
-            text='GAME OVER',
+            text='Chaat..se..Tamacha',
             font_size=60,
             bold=True,
             size_hint=(None, None),
-            color=(0.9, 0.1, 0.1, 1)
+            color=(0.9, 0.1, 0.1, 1),
+            outline_width=2,
+            outline_color=(1, 1, 1, 1)
         )
 
         self.score_display_label = Label(
