@@ -63,10 +63,10 @@ class Pipe:
     def __init__(self, x, y, height, is_top=False, gamewidget=None):
         self.x = x
         self.y = y
-        self.width = gamewidget.width * 0.13 if gamewidget else 70
+        self.width = gamewidget.width * 0.15 if gamewidget else 70
         self.height = height
         self.is_top = is_top
-        self.speed = 170
+        self.speed = 150
 
         if is_top:
             pipe_path = os.path.join(BASE_DIR, 'assets', 'graphics', 'pipe_top.png')
@@ -399,7 +399,7 @@ class GameWidget(Widget):
         self.add_widget(self.score_label)
 
         self.game_loop = Clock.schedule_interval(self.update_game, 1 / 60)
-        self.pipe_spawn_event = Clock.schedule_interval(self.spawn_pipe, 1.5)
+        self.pipe_spawn_event = Clock.schedule_interval(self.spawn_pipe, 2)
 
         if 'background_music' in self.sounds:
             self.sounds['background_music'].play()
