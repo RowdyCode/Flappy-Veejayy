@@ -399,7 +399,7 @@ class GameWidget(Widget):
         self.add_widget(self.score_label)
 
         self.game_loop = Clock.schedule_interval(self.update_game, 1 / 60)
-        self.pipe_spawn_event = Clock.schedule_interval(self.spawn_pipe, 2.8)
+        self.pipe_spawn_event = Clock.schedule_interval(self.spawn_pipe, 3.5)
 
         if 'background_music' in self.sounds:
             self.sounds['background_music'].play()
